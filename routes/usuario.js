@@ -13,9 +13,15 @@ var app = express();
 var Usuario = require('../models/usuario');
 
 //obtener todos los usuarios
+// http://localhost:3000/usuario?desde=5   probar en el postman
 app.get('/', (req, res, next) => {
 
+    var desde = req.query.desde || 0;
+    desde = Number(desde);
+
     Usuario.find({}, 'nombre email img role')
+        .skip(desde)
+        .limit(5)
         .exec(
             (err, usuarios) => {
 
@@ -27,14 +33,14 @@ app.get('/', (req, res, next) => {
                     });
                 }
 
-                res.status(200).json({
-                    ok: true,
-                    usuarios: usuarios
+                Usuario.count({}, (err, contador) => {
+                    res.status(200).json({
+                        ok: true,
+                        usuarios: usuarios,
+                        total: contador
+                    });
                 });
-
             })
-
-
 });
 
 
