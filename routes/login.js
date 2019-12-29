@@ -2,138 +2,145 @@ var express = require('express');
 var bcrypt = require('bcryptjs');
 var jwt = require('jsonwebtoken');
 
-var SEED = require('../config/config').SEED; // seed o semilla del token
-
+var SEED = require('../config/config').SEED;
 
 var app = express();
 var Usuario = require('../models/usuario');
 
 
-// Google
-var CLIENT_ID = require('../config/config').CLIENT_ID; // CLIENT_ID Google
-const { OAuth2Client } = require('google-auth-library');
-const client = new OAuth2Client(CLIENT_ID);
+var GoogleAuth = require('google-auth-library');
+var auth = new GoogleAuth;
 
-// Autenticación Google
-async function verify(token) {
-    const ticket = await client.verifyIdToken({
-        idToken: token,
-        audience: CLIENT_ID, // Specify the CLIENT_ID of the app that accesses the backend
-        // Or, if multiple clients access the backend:
-        //[CLIENT_ID_1, CLIENT_ID_2, CLIENT_ID_3]
+const GOOGLE_CLIENT_ID = require('../config/config').GOOGLE_CLIENT_ID;
+const GOOGLE_SECRET = require('../config/config').GOOGLE_SECRET;
+
+
+var mdAutenticacion = require('../middlewares/autenticacion');
+
+// ==========================================
+//  Renovar Token
+// ==========================================
+app.get('/renuevatoken', (req, res) => {
+
+    var token = jwt.sign({ usuario: req.usuario }, SEED, { expiresIn: 14400 }); // 4 horas
+
+    return res.status(200).json({
+        ok: true,
+        token: token
     });
-
-    const payload = ticket.getPayload();
-    // const userid = payload['sub'];
-    // If request specified a G Suite domain:
-    //const domain = payload['hd'];
-
-    return {
-        nombre: payload.name,
-        email: payload.email,
-        img: payload.picture,
-        google: true,
-        // payload: payload
-        // payload // es lo mismo que la linea de arriba
-    }
-}
-
-app.post('/google', async(req, res) => {
-
-    var token = req.body.token;
-
-    // envio el tokn recibido en la petición a la función verify, el await funciona como una promesa
-    // ara poder utilizar el await es obligatoro que se ejecute dentro de una función async como la de arriba
-    var googleUser = await verify(token)
-        .catch(e => {
-            return res.status(403).json({
-                ok: false,
-                mensaje: 'Token no valido'
-            });
-        });
+});
 
 
+// ==========================================
+//  Autenticación De Google
+// ==========================================
+app.post('/google', (req, res) => {
 
-    Usuario.findOne({ email: googleUser.email }, (err, usuarioDB) => {
+    var token = req.body.token || 'XXX';
 
-        if (err) {
-            return res.status(500).json({
-                ok: false,
-                mensaje: 'Error al buscar usuarios',
-                errors: err
-            });
-        }
+    var client = new auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_SECRET, '');
 
-        if (usuarioDB) {
-            if (usuarioDB.google === false) {
+    client.verifyIdToken(
+        token,
+        GOOGLE_CLIENT_ID,
+        // Or, if multiple clients access the backend:
+        //[CLIENT_ID_1, CLIENT_ID_2, CLIENT_ID_3],
+        function (e, login) {
+
+            if (e) {
                 return res.status(400).json({
-                    ok: false,
-                    mensaje: 'Debe usar su autenticación normal'
-                });
-            } else {
-
-                var token = jwt.sign({ usuario: usuarioDB }, SEED, { expiresIn: 14400 }); // el seed es la semilla que hace que el token sea unico, 14400 son 4 horas para expiración
-
-                res.status(200).json({
                     ok: true,
-                    usuario: usuarioDB,
-                    token: token,
-                    id: usuarioDB._id
+                    mensaje: 'Token no válido',
+                    errors: e
                 });
-
             }
-        } else {
-            // el usuario no existe hay que crearlo
-            var usuario = new Usuario();
-
-            usuario.nombre = googleUser.nombre;
-            usuario.email = googleUser.email;
-            usuario.img = googleUser.img;
-            usuario.google = true;
-            usuario.password = ':)';
 
 
-            usuario.save((err, usuarioDB) => {
+            var payload = login.getPayload();
+            var userid = payload['sub'];
+            // If request specified a G Suite domain:
+            //var domain = payload['hd'];
+
+            Usuario.findOne({ email: payload.email }, (err, usuario) => {
 
                 if (err) {
                     return res.status(500).json({
-                        ok: false,
-                        mensaje: 'Error al buscar usuarios',
+                        ok: true,
+                        mensaje: 'Error al buscar usuario - login',
                         errors: err
                     });
                 }
 
-                var token = jwt.sign({ usuario: usuarioDB }, SEED, { expiresIn: 14400 }); // el seed es la semilla que hace que el token sea unico, 14400 son 4 horas para expiración
+                if (usuario) {
 
-                res.status(200).json({
-                    ok: true,
-                    usuario: usuarioDB,
-                    token: token,
-                    id: usuarioDB._id
-                });
+                    if (usuario.google === false) {
+                        return res.status(400).json({
+                            ok: true,
+                            mensaje: 'Debe de usar su autenticación normal'
+                        });
+                    } else {
+
+                        usuario.password = ':)';
+
+                        var token = jwt.sign({ usuario: usuario }, SEED, { expiresIn: 14400 }); // 4 horas
+
+                        res.status(200).json({
+                            ok: true,
+                            usuario: usuario,
+                            token: token,
+                            id: usuario._id,
+                            menu: obtenerMenu(usuario.role)
+                        });
+
+                    }
+
+                    // Si el usuario no existe por correo
+                } else {
+
+                    var usuario = new Usuario();
+
+                    usuario.nombre = payload.name;
+                    usuario.email = payload.email;
+                    usuario.password = ':)';
+                    usuario.img = payload.picture;
+                    usuario.google = true;
+
+                    usuario.save((err, usuarioDB) => {
+
+                        if (err) {
+                            return res.status(500).json({
+                                ok: true,
+                                mensaje: 'Error al crear usuario - google',
+                                errors: err
+                            });
+                        }
+
+
+                        var token = jwt.sign({ usuario: usuarioDB }, SEED, { expiresIn: 14400 }); // 4 horas
+
+                        res.status(200).json({
+                            ok: true,
+                            usuario: usuarioDB,
+                            token: token,
+                            id: usuarioDB._id,
+                            menu: obtenerMenu(usuarioDB.role)
+                        });
+
+                    });
+
+                }
+
 
             });
-        }
 
 
-    });
-
-
-    // return res.status(200).json({
-    //     ok: true,
-    //     mensaje: 'ok',
-    //     googleUser: googleUser
-    // });
+        });
 
 });
 
-
-
-
-
-
-
-// Autentcación Normal
+// ==========================================
+//  Autenticación normal
+// ==========================================
 app.post('/', (req, res) => {
 
     var body = req.body;
@@ -143,7 +150,7 @@ app.post('/', (req, res) => {
         if (err) {
             return res.status(500).json({
                 ok: false,
-                mensaje: 'Error al buscar usuarios',
+                mensaje: 'Error al buscar usuario',
                 errors: err
             });
         }
@@ -152,7 +159,7 @@ app.post('/', (req, res) => {
             return res.status(400).json({
                 ok: false,
                 mensaje: 'Credenciales incorrectas - email',
-                message: 'Email incorrecto'
+                errors: err
             });
         }
 
@@ -160,30 +167,61 @@ app.post('/', (req, res) => {
             return res.status(400).json({
                 ok: false,
                 mensaje: 'Credenciales incorrectas - password',
-                message: 'Password incorrecta'
+                errors: err
             });
         }
 
-        // crear un token!!!
+        // Crear un token!!!
         usuarioDB.password = ':)';
-        // var token = jwt.sign({ usuario: usuarioDB }, '@este -es@-un seed-dificil', { expiresIn: 14400 }); // el seed es la semilla que hace que el token sea unico, 14400 son 4 horas para expiración
 
-        var token = jwt.sign({ usuario: usuarioDB }, SEED, { expiresIn: 14400 }); // el seed es la semilla que hace que el token sea unico, 14400 son 4 horas para expiración
-
+        var token = jwt.sign({ usuario: usuarioDB }, SEED, { expiresIn: 14400 }); // 4 horas
 
         res.status(200).json({
             ok: true,
             usuario: usuarioDB,
             token: token,
-            id: usuarioDB._id
+            id: usuarioDB._id,
+            menu: obtenerMenu(usuarioDB.role)
         });
 
     });
 
-
 });
 
 
+function obtenerMenu(role) {
+
+    var menu = [
+        {
+            titulo: 'Principal',
+            icono: 'mdi mdi-gauge',
+            submenu: [
+                { titulo: 'Dashboard', url: '/dashboard' },
+                { titulo: 'ProgressBar', url: '/progress' },
+                { titulo: 'Gráficas', url: '/graficas1' },
+                { titulo: 'Promesas', url: '/promesas' },
+                { titulo: 'RXJS', url: '/rxjs' }
+            ]
+        },
+        {
+            titulo: 'Mantenimientos',
+            icono: 'mdi mdi-folder-lock-open',
+            submenu: [
+                // { titulo: 'Usuarios', url: '/usuarios' },
+                { titulo: 'Hospitales', url: '/hospitales' },
+                { titulo: 'Médicos', url: '/medicos' }
+            ]
+        }
+    ];
+
+
+    if (role === 'ADMIN_ROLE') {
+        menu[1].submenu.unshift({ titulo: 'Usuarios', url: '/usuarios' });
+    }
+
+    return menu;
+
+}
 
 
 module.exports = app;

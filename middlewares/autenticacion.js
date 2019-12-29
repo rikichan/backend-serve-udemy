@@ -1,12 +1,12 @@
 var jwt = require('jsonwebtoken');
 
-var SEED = require('../config/config').SEED; // seed o semilla del token
+var SEED = require('../config/config').SEED;
 
 
-
-// Verificar Token -middleware... si el token no es valido o enviado no se puede accedera ninguno de los metos debajos del middleware
-
-exports.verificaToken = function(req, res, next) {
+// ==========================================
+//  Verificar token
+// ==========================================
+exports.verificaToken = function (req, res, next) {
 
     var token = req.query.token;
 
@@ -22,13 +22,53 @@ exports.verificaToken = function(req, res, next) {
 
         req.usuario = decoded.usuario;
 
-        next(); // si pasa el next le dice que puede continuar con las demas funciones debajo
+        next();
 
-        // res.status(200).json({
-        //     ok: true,
-        //     decoded: decoded
-        // });
 
     });
+
+}
+
+
+// ==========================================
+//  Verificar Admin
+// ==========================================
+exports.verificaADMIN_ROLE = function (req, res, next) {
+
+    var usuario = req.usuario;
+
+    if (usuario.role === 'ADMIN_ROLE') {
+        next();
+        return;
+    }
+    else {
+        return res.status(401).json({
+            ok: false,
+            mensaje: 'Token incorrecto- No es un Admin', // no indicar en el mensaje que  no es un admin
+            errors: { mensaje: 'No es admin, no puede hacer eso' }
+        });
+    }
+}
+
+
+// ==========================================
+//  Verificar Admin o Mismo Usuario
+// ==========================================
+exports.verificaADMIN_MismoUsuario = function (req, res, next) {
+
+    var usuario = req.usuario;
+    var id = req.params.id; // vine del usuario donde se implementa el MD
+
+    if (usuario.role === 'ADMIN_ROLE' || usuario._id === id) {
+        next();
+        return;
+    }
+    else {
+        return res.status(401).json({
+            ok: false,
+            mensaje: 'Token incorrecto- No es un Admin ni es el mismo usuario', // no indicar en el mensaje que  no es un admin
+            errors: { mensaje: 'No es admin, no puede hacer eso' }
+        });
+    }
 
 }

@@ -1,27 +1,28 @@
 var express = require('express');
+var fs = require('fs');
 
 var app = express();
-const path = require('path');
-const fs = require('fs');
+
 
 app.get('/:tipo/:img', (req, res, next) => {
-
 
     var tipo = req.params.tipo;
     var img = req.params.img;
 
-    // __dirname me ayuda a saber la ruta completa automaticamente, libreria propia de node
-    var pathImagen = path.resolve(__dirname, `../uploads/${tipo}/${img}`);
+    var path = `./uploads/${ tipo }/${ img }`;
 
-    // revisa si la ruta de la img existe
-    if (fs.existsSync(pathImagen)) {
-        res.sendFile(pathImagen);
-    } else {
-        var pathNoImagen = path.resolve(__dirname, '../assets/no-img.jpg');
-        res.sendFile(pathNoImagen);
+    fs.exists(path, existe => {
 
-    }
+        if (!existe) {
+            path = './assets/no-img.jpg';
+        }
 
-})
+
+        res.sendfile(path);
+
+    });
+
+
+});
 
 module.exports = app;

@@ -6,7 +6,9 @@ var app = express();
 
 var Hospital = require('../models/hospital');
 
-//obtener todos los hospital
+// ==========================================
+// Obtener todos los hospitales
+// ==========================================
 app.get('/', (req, res, next) => {
 
     var desde = req.query.desde || 0;
@@ -22,38 +24,34 @@ app.get('/', (req, res, next) => {
                 if (err) {
                     return res.status(500).json({
                         ok: false,
-                        mensaje: 'Error cargando hospitales',
+                        mensaje: 'Error cargando hospital',
                         errors: err
                     });
                 }
-                Hospital.count({}, (err, contador) => {
+
+                Hospital.count({}, (err, conteo) => {
+
                     res.status(200).json({
                         ok: true,
                         hospitales: hospitales,
-                        total: contador
+                        total: conteo
                     });
-                });
+                })
 
-            })
-
-
+            });
 });
 
-// Actualizar Hospital, put o patch para actualizar
-app.put('/:id', mdAutenticacion.verificaToken, (req, res, next) => {
+
+// ==========================================
+// Actualizar Hospital
+// ==========================================
+app.put('/:id', mdAutenticacion.verificaToken, (req, res) => {
 
     var id = req.params.id;
     var body = req.body;
 
     Hospital.findById(id, (err, hospital) => {
 
-        if (hospital === null) {
-            return res.status(500).json({
-                ok: false,
-                mensaje: 'Error al buscar hospital',
-                errors: err
-            });
-        }
 
         if (err) {
             return res.status(500).json({
@@ -64,16 +62,13 @@ app.put('/:id', mdAutenticacion.verificaToken, (req, res, next) => {
         }
 
         if (!hospital) {
-            if (err) {
-                return res.status(400).json({
-                    ok: false,
-                    mensaje: 'El hospital con el id' + id + ' no existe',
-                    errors: {
-                        message: 'No existe hospital con ese ID'
-                    }
-                });
-            }
+            return res.status(400).json({
+                ok: false,
+                mensaje: 'El hospital con el id ' + id + ' no existe',
+                errors: { message: 'No existe un hospital con ese ID' }
+            });
         }
+
 
         hospital.nombre = body.nombre;
         hospital.usuario = req.usuario._id;
@@ -92,25 +87,24 @@ app.put('/:id', mdAutenticacion.verificaToken, (req, res, next) => {
                 ok: true,
                 hospital: hospitalGuardado
             });
-
         });
-
     });
-
 });
 
 
-// Crear nuevo hospital
+// ==========================================
+// Crear un nuevo hospital
+// ==========================================
 app.post('/', mdAutenticacion.verificaToken, (req, res) => {
 
     var body = req.body;
-
     var hospital = new Hospital({
         nombre: body.nombre,
-        usuario: req.usuario._id, // el usuario lo saca del  mdAutenticacion.verificaToken al decodificar el token
+        usuario: req.usuario._id
     });
 
     hospital.save((err, hospitalGuardado) => {
+
         if (err) {
             return res.status(400).json({
                 ok: false,
@@ -124,12 +118,12 @@ app.post('/', mdAutenticacion.verificaToken, (req, res) => {
             hospital: hospitalGuardado
         });
     });
-
-
-
 });
 
-// Borrar hospital por id
+
+// ============================================
+//   Borrar un hospital por el id
+// ============================================
 app.delete('/:id', mdAutenticacion.verificaToken, (req, res) => {
 
     var id = req.params.id;
@@ -139,7 +133,7 @@ app.delete('/:id', mdAutenticacion.verificaToken, (req, res) => {
         if (err) {
             return res.status(500).json({
                 ok: false,
-                mensaje: 'Error al borrar hospital',
+                mensaje: 'Error borrar hospital',
                 errors: err
             });
         }
@@ -148,9 +142,7 @@ app.delete('/:id', mdAutenticacion.verificaToken, (req, res) => {
             return res.status(400).json({
                 ok: false,
                 mensaje: 'No existe un hospital con ese id',
-                errors: {
-                    message: 'No existe un hospital con ese id'
-                }
+                errors: { message: 'No existe un hospital con ese id' }
             });
         }
 
@@ -163,5 +155,41 @@ app.delete('/:id', mdAutenticacion.verificaToken, (req, res) => {
 
 });
 
+
+// ========================================== 
+//  Obtener Hospital por ID 
+// ========================================== 
+
+app.get('/:id', (req, res) => {
+
+    var id = req.params.id;
+
+    Hospital.findById(id)
+        .populate('usuario', 'nombre img email')
+        .exec((err, hospital) => {
+
+
+            if (err) {
+                return res.status(500).json({
+                    ok: false,
+                    mensaje: 'Error al buscar hospital',
+                    errors: err
+                });
+            }
+
+            if (!hospital) {
+                return res.status(400).json({
+                    ok: false,
+                    mensaje: 'El hospital con el id ' + id + 'no existe',
+                    errors: { message: 'No existe un hospital con ese ID' }
+                });
+            }
+
+            res.status(200).json({
+                ok: true,
+                hospital: hospital
+            });
+        });
+});
 
 module.exports = app;

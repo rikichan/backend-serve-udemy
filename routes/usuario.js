@@ -1,25 +1,22 @@
 var express = require('express');
-var bcrypt = require('bcryptjs'); // libreria para encriptar
-// var jwt = require('jsonwebtoken');
+var bcrypt = require('bcryptjs');
+var jwt = require('jsonwebtoken');
 
 var mdAutenticacion = require('../middlewares/autenticacion');
 
-// var SEED = require('../config/config').SEED; // seed o semilla del token
-
-
 var app = express();
-
 
 var Usuario = require('../models/usuario');
 
-//obtener todos los usuarios
-// http://localhost:3000/usuario?desde=5   probar en el postman
+// ==========================================
+// Obtener todos los usuarios
+// ==========================================
 app.get('/', (req, res, next) => {
 
     var desde = req.query.desde || 0;
     desde = Number(desde);
 
-    Usuario.find({}, 'nombre email img role')
+    Usuario.find({}, 'nombre email img role google')
         .skip(desde)
         .limit(5)
         .exec(
@@ -28,71 +25,53 @@ app.get('/', (req, res, next) => {
                 if (err) {
                     return res.status(500).json({
                         ok: false,
-                        mensaje: 'Error cargando usuarios',
+                        mensaje: 'Error cargando usuario',
                         errors: err
                     });
                 }
 
-                Usuario.count({}, (err, contador) => {
+                Usuario.count({}, (err, conteo) => {
+
                     res.status(200).json({
                         ok: true,
                         usuarios: usuarios,
-                        total: contador
+                        total: conteo
                     });
-                });
-            })
+
+                })
+
+
+
+
+            });
 });
 
 
-// se pego en la carpeta middlewares/ autenticación
-
-// // Verificar Token -middleware... si el token no es valido o enviado no se puede accedera ninguno de los metos debajos del middleware
-// app.use('/', (req, res, next) => {
-
-//     var token = req.query.token;
-
-//     jwt.verify(token, SEED, (err, decoded) => {
-
-//         if (err) {
-//             return res.status(401).json({
-//                 ok: false,
-//                 mensaje: 'Token incorrecto',
-//                 errors: err
-//             });
-//         }
-
-//         next(); // si pasa el next le dice que puede continuar con las demas funciones debajo
-//     });
-// });
-
-
-
-// Actualizar Usuario, put o patch para actualizar
-app.put('/:id', mdAutenticacion.verificaToken, (req, res, next) => {
+// ==========================================
+// Actualizar usuario
+// ==========================================
+app.put('/:id', [mdAutenticacion.verificaToken, mdAutenticacion.verificaADMIN_MismoUsuario], (req, res) => {
 
     var id = req.params.id;
     var body = req.body;
 
     Usuario.findById(id, (err, usuario) => {
 
+
         if (err) {
             return res.status(500).json({
                 ok: false,
-                mensaje: 'Error al buscar usuaio',
+                mensaje: 'Error al buscar usuario',
                 errors: err
             });
         }
 
         if (!usuario) {
-            if (err) {
-                return res.status(400).json({
-                    ok: false,
-                    mensaje: 'El usuaro con el id' + id + ' no existe',
-                    errors: {
-                        message: 'No existe usuario con ese ID'
-                    }
-                });
-            }
+            return res.status(400).json({
+                ok: false,
+                mensaje: 'El usuario con el id ' + id + ' no existe',
+                errors: { message: 'No existe un usuario con ese ID' }
+            });
         }
 
 
@@ -105,7 +84,7 @@ app.put('/:id', mdAutenticacion.verificaToken, (req, res, next) => {
             if (err) {
                 return res.status(400).json({
                     ok: false,
-                    mensaje: 'Error al actualizar usurio',
+                    mensaje: 'Error al actualizar usuario',
                     errors: err
                 });
             }
@@ -124,8 +103,11 @@ app.put('/:id', mdAutenticacion.verificaToken, (req, res, next) => {
 });
 
 
-// Crear nuevo usurio
-app.post('/', mdAutenticacion.verificaToken, (req, res) => {
+
+// ==========================================
+// Crear un nuevo usuario
+// ==========================================
+app.post('/', (req, res) => {
 
     var body = req.body;
 
@@ -138,6 +120,7 @@ app.post('/', mdAutenticacion.verificaToken, (req, res) => {
     });
 
     usuario.save((err, usuarioGuardado) => {
+
         if (err) {
             return res.status(400).json({
                 ok: false,
@@ -149,17 +132,19 @@ app.post('/', mdAutenticacion.verificaToken, (req, res) => {
         res.status(201).json({
             ok: true,
             usuario: usuarioGuardado,
-            usuarioToken: req.usuario
+            usuariotoken: req.usuario
         });
+
+
     });
-
-
 
 });
 
-// Borrar usuario por id
 
-app.delete('/:id', mdAutenticacion.verificaToken, (req, res) => {
+// ============================================
+//   Borrar un usuario por el id
+// ============================================
+app.delete('/:id', [mdAutenticacion.verificaToken, mdAutenticacion.verificaADMIN_ROLE], (req, res) => {
 
     var id = req.params.id;
 
@@ -168,7 +153,7 @@ app.delete('/:id', mdAutenticacion.verificaToken, (req, res) => {
         if (err) {
             return res.status(500).json({
                 ok: false,
-                mensaje: 'Error al borrar usuario',
+                mensaje: 'Error borrar usuario',
                 errors: err
             });
         }
@@ -177,9 +162,7 @@ app.delete('/:id', mdAutenticacion.verificaToken, (req, res) => {
             return res.status(400).json({
                 ok: false,
                 mensaje: 'No existe un usuario con ese id',
-                errors: {
-                    message: 'No existe un usuario con ese id'
-                }
+                errors: { message: 'No existe un usuario con ese id' }
             });
         }
 
